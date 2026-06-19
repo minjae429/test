@@ -1,6 +1,6 @@
 # 🤖 Robot is Future 26-1 — LeRobot SO-ARM 스터디
 
-> 카이스트 로보틱스 스터디 그룹 | LeRobot + SO-ARM100으로 모방학습(Imitation Learning) 구현
+> 로보틱스 스터디 그룹 | LeRobot + SO-ARM101으로 모방학습(Imitation Learning) 구현
 
 ---
 
