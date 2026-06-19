@@ -1,6 +1,26 @@
-# 🤖 Robot is Future 26-1 — LeRobot SO-ARM 스터디
+# 🤖 Robot is Future 26-1 — LeRobot SO-101 스터디
 
-> 로보틱스 스터디 그룹 | LeRobot + SO-ARM101으로 모방학습(Imitation Learning) 구현
+> LeRobot + SO-101으로 모방학습(Imitation Learning) 구현
+
+---
+
+## 🦾 SO-101 로봇 소개
+
+SO-101은 LeRobot의 플래그십 로봇 암으로, Leader(조종) 암과 Follower(실행) 암 한 쌍으로 구성됩니다.
+
+- **Follower 암**: 6x STS3215 모터, 모두 1/345 기어비
+- **Leader 암**: 관절별로 다른 기어비 적용 (자체 무게 지탱 + 가벼운 조작 가능)
+
+| 관절 | 모터 | 기어비 |
+|------|------|--------|
+| Base / Shoulder Pan | 1 | 1/191 |
+| Shoulder Lift | 2 | 1/345 |
+| Elbow Flex | 3 | 1/191 |
+| Wrist Flex | 4 | 1/147 |
+| Wrist Roll | 5 | 1/147 |
+| Gripper | 6 | 1/147 |
+
+> 파츠 목록 및 3D 프린팅 가이드: [SO-ARM100 GitHub README](https://github.com/TheRobotStudio/SO-ARM100)
 
 ---
 
@@ -15,17 +35,117 @@ LeRobot 공식 문서를 기반으로 환경을 구성합니다.
 ### 1. Miniforge 설치 (conda 환경)
 
 ```bash
-# Miniforge 다운로드 및 설치
-wget https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-Linux-x86_64.sh
-bash Miniforge3-Linux-x86_64.sh
+wget "https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-$(uname)-$(uname -m).sh"
+bash Miniforge3-$(uname)-$(uname -m).sh
+# 설치 후 터미널 재시작
 ```
 
-### 2. 가상환경 생성 및 LeRobot 설치
+### 2. 가상환경 생성
 
 ```bash
-conda create -n lerobot python=3.10
+conda create -y -n lerobot python=3.12
 conda activate lerobot
-pip install lerobot
+```
+
+### 3. ffmpeg 설치
+
+```bash
+conda install ffmpeg -c conda-forge
+ffmpeg -version  # 버전 확인
+```
+
+> ⚠️ **ffmpeg 8.X는 아직 지원되지 않습니다.** 8.X가 설치된 경우 아래 명령으로 7.1.1을 명시 설치하세요.
+> ```bash
+> conda install ffmpeg=7.1.1 -c conda-forge
+> ```
+
+### 4. evdev 설치 (WSL 환경만)
+
+```bash
+conda install evdev -c conda-forge  # WSL 환경에서만 설치
+```
+
+### 5. LeRobot 설치
+
+```bash
+git clone https://github.com/huggingface/lerobot.git
+cd lerobot
+pip install -e .
+```
+
+필요에 따라 추가 기능 설치:
+
+```bash
+pip install 'lerobot[all]'           # 전체 기능
+pip install 'lerobot[aloha,pusht]'   # 특정 기능 (Aloha & PushT)
+pip install 'lerobot[feetech]'       # Feetech 모터 지원 (SO-101 필수)
+```
+
+---
+
+## 🔌 모터 설정
+
+### 1. USB 포트 확인
+
+각 암의 포트를 찾으려면 아래 명령 실행 후 프롬프트에 따라 USB를 분리합니다.
+
+```bash
+lerobot-find-port
+```
+
+출력 예시:
+```
+The port of this MotorsBus is /dev/ttyUSB0
+```
+
+### 2. 모터 ID 및 Baudrate 설정
+
+모터는 기본적으로 ID=1로 출고됩니다. 각 모터에 고유 ID를 부여해야 합니다 (EEPROM에 저장되므로 최초 1회만 수행).
+
+**Follower 암**
+```bash
+lerobot-setup-motors \
+    --robot.type=so101_follower \
+    --robot.port=/dev/ttyUSB0   # 이전 단계에서 확인한 포트
+```
+
+스크립트 지시에 따라 모터를 하나씩 연결하며 ID를 순서대로 설정합니다 (gripper → wrist_roll → ... → shoulder_pan).
+
+**Leader 암**
+```bash
+lerobot-setup-motors \
+    --teleop.type=so101_leader \
+    --teleop.port=/dev/ttyUSB1  # 이전 단계에서 확인한 포트
+```
+
+> **Waveshare 보드 사용 시**: 점퍼 2개가 `B` 채널(USB)에 설정되어 있는지 확인하세요.
+
+---
+
+## 📐 캘리브레이션 (Calibration)
+
+Leader와 Follower 암이 동일한 물리적 위치에서 동일한 값을 갖도록 맞추는 과정입니다. 신경망 모델의 범용성을 위해 반드시 수행해야 합니다.
+
+### Follower 캘리브레이션
+
+```bash
+lerobot-calibrate \
+    --robot.type=so101_follower \
+    --robot.port=/dev/ttyUSB0 \
+    --robot.id=my_follower_arm
+```
+
+캘리브레이션 순서:
+1. 모든 관절을 가동 범위 **중간 위치**로 이동
+2. Enter 후 각 관절을 **전체 가동 범위**에 걸쳐 천천히 이동
+
+### Leader 캘리브레이션
+
+```bash
+lerobot-calibrate \
+    --teleop.type=so101_leader \
+    --teleop.port=/dev/ttyUSB1 \
+    --teleop.id=my_leader_arm
 ```
 
 ---
@@ -100,4 +220,6 @@ sudo chmod 666 /dev/ttyUSB*
 
 - [GitHub 레포지토리](https://github.com/hyunsoopark4/Robot_is_Future-26_1)
 - [LeRobot 설치 문서](https://huggingface.co/docs/lerobot/installation)
+- [SO-101 공식 문서](https://huggingface.co/docs/lerobot/so101)
+- [SO-ARM100 파츠 가이드](https://github.com/TheRobotStudio/SO-ARM100)
 - [로보시지 ACT 가이드](https://roboseasy.ai/docs/lerobot-so-arm/policy-act)
